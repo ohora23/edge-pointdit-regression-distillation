@@ -29,21 +29,21 @@
     <button id="prevSample">◀ prev sample</button>
     <select id="sampleSelect"></select>
     <button id="nextSample">next sample ▶</button>
+    <select id="cameraSelect" style="display:none"></select>
     <button id="start">start camera</button>
   </div>
 </header>
 
 <div id="grid">
   <div class="panel">
-    <span class="label">input (no webcam? browsing test-set samples)</span>
-    <video id="video" autoplay playsinline muted></video>
+    <span class="label">model input (cropped to 512×384)</span>
+    <canvas id="capture"></canvas>
+    <video id="video" autoplay playsinline muted style="display:none"></video>
     <img id="sampleView" style="display:none">
   </div>
   <div class="panel"><span class="label">predicted depth</span><img id="depth"></div>
   <div class="panel"><span class="label">point map (drag to orbit)</span><canvas id="cloud"></canvas></div>
 </div>
-
-<canvas id="capture" style="display:none"></canvas>
 
 <script type="importmap">
 { "imports": {
@@ -68,8 +68,20 @@ const nextBtn = document.getElementById("nextSample");
 
 // server's model resolution (must match --resolution passed to server.py)
 const MODEL_W = 512, MODEL_H = 384;
+const MODEL_ASPECT = MODEL_W / MODEL_H;
 captureCanvas.width = MODEL_W;
 captureCanvas.height = MODEL_H;
+
+// center-crop `source` (sw x sh) to the model's aspect ratio, then draw at model resolution
+// -> the capture panel shows exactly what the model sees, not a stretched full frame.
+function drawCropped(source, sw, sh) {
+  const srcAspect = sw / sh;
+  let cropW, cropH;
+  if (srcAspect > MODEL_ASPECT) { cropH = sh; cropW = sh * MODEL_ASPECT; }
+  else { cropW = sw; cropH = sw / MODEL_ASPECT; }
+  const sx = (sw - cropW) / 2, sy = (sh - cropH) / 2;
+  ctx.drawImage(source, sx, sy, cropW, cropH, 0, 0, MODEL_W, MODEL_H);
+}
 
 // --- three.js point cloud viewer ---
 const cloudCanvas = document.getElementById("cloud");
@@ -141,19 +153,38 @@ async function runInference(dataUrl) {
 }
 
 // --- webcam capture + continuous inference loop ---
+const cameraSelect = document.getElementById("cameraSelect");
 let running = false;
+let currentStream = null;
+
+async function startCamera(deviceId) {
+  if (currentStream) currentStream.getTracks().forEach((t) => t.stop());
+  const constraint = deviceId
+    ? { deviceId: { exact: deviceId }, width: 640, height: 480 }
+    : { width: 640, height: 480 };
+  currentStream = await navigator.mediaDevices.getUserMedia({ video: constraint });
+  video.srcObject = currentStream;
+  await video.play();
+  running = true;
+  loop();
+}
 
 startBtn.onclick = async () => {
   startBtn.disabled = true;
   statusEl.textContent = "requesting camera...";
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-    video.srcObject = stream;
-    await video.play();
-    video.style.display = "block";
-    sampleView.style.display = "none";
-    running = true;
-    loop();
+    // getUserMedia once first: device labels are blank until permission is granted
+    await startCamera(null);
+
+    const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+    if (devices.length > 1) {
+      // multiple video nodes (e.g. RealSense exposes separate RGB/IR streams) -> let the
+      // user pick, since labels don't reliably distinguish which one is the color feed
+      cameraSelect.innerHTML = devices.map((d, i) => `<option value="${d.deviceId}">${d.label || "camera " + i}</option>`).join("");
+      cameraSelect.style.display = "inline-block";
+      cameraSelect.onchange = () => startCamera(cameraSelect.value);
+    }
+    statusEl.textContent = "camera started";
   } catch (e) {
     statusEl.textContent = "no camera (" + e.message + ") — browse samples instead";
     startBtn.disabled = false;
@@ -162,7 +193,7 @@ startBtn.onclick = async () => {
 
 async function loop() {
   if (!running) return;
-  ctx.drawImage(video, 0, 0, MODEL_W, MODEL_H);
+  drawCropped(video, video.videoWidth, video.videoHeight);
   await runInference(captureCanvas.toDataURL("image/jpeg", 0.8));
   requestAnimationFrame(loop);
 }
@@ -173,14 +204,12 @@ let sampleIdx = 0;
 
 async function showSample(idx) {
   running = false;
-  video.style.display = "none";
-  sampleView.style.display = "block";
   sampleIdx = (idx + sampleNames.length) % sampleNames.length;
   sampleSelect.value = sampleNames[sampleIdx];
   const url = "samples/" + sampleNames[sampleIdx];
   sampleView.src = url;
   await new Promise((resolve) => { sampleView.onload = resolve; });
-  ctx.drawImage(sampleView, 0, 0, MODEL_W, MODEL_H);
+  drawCropped(sampleView, sampleView.naturalWidth, sampleView.naturalHeight);
   await runInference(captureCanvas.toDataURL("image/jpeg", 0.9));
 }
 
