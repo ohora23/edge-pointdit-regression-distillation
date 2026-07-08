@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edge-PointDiT — Real-Time Transparent-Object Depth on RK3588</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Regression-distilled PointDiT reproduction, deployed end-to-end to a Rockchip RK3588 NPU for real-time transparent-object depth.">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f6f7f9;
+    --text: #1a1d21;
+    --text-dim: #565c66;
+    --border: #e3e6ea;
+    --accent: #2563eb;
+    --accent-bg: #eef3ff;
+    --good: #0f9960;
+    --bad: #d1453d;
+    --code-bg: #f1f3f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --bg-alt: #1b1e24;
+      --text: #e7e9ec;
+      --text-dim: #9aa1ab;
+      --border: #2a2e35;
+      --accent: #5b9dff;
+      --accent-bg: #1b2a45;
+      --good: #33c481;
+      --bad: #ff6f68;
+      --code-bg: #1f232a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161a; --bg-alt: #1b1e24; --text: #e7e9ec; --text-dim: #9aa1ab;
+    --border: #2a2e35; --accent: #5b9dff; --accent-bg: #1b2a45; --good: #33c481;
+    --bad: #ff6f68; --code-bg: #1f232a;
+  }
+  :root[data-theme="light"] {
+    --bg: #ffffff; --bg-alt: #f6f7f9; --text: #1a1d21; --text-dim: #565c66;
+    --border: #e3e6ea; --accent: #2563eb; --accent-bg: #eef3ff; --good: #0f9960;
+    --bad: #d1453d; --code-bg: #f1f3f5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+  header.hero {
+    background: var(--bg-alt);
+    border-bottom: 1px solid var(--border);
+    padding: 64px 0 40px;
+    text-align: center;
+  }
+  h1 { font-size: 1.9rem; margin: 0 0 10px; letter-spacing: -0.01em; }
+  .subtitle { color: var(--text-dim); font-size: 1.05rem; margin: 0 0 22px; }
+  .badge {
+    display: inline-block; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em;
+    text-transform: uppercase; color: var(--accent); background: var(--accent-bg);
+    border-radius: 100px; padding: 4px 12px; margin-bottom: 18px;
+  }
+  .links { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .links a {
+    color: var(--text); text-decoration: none; border: 1px solid var(--border);
+    padding: 8px 16px; border-radius: 8px; font-size: 0.9rem; background: var(--bg);
+  }
+  .links a:hover { border-color: var(--accent); color: var(--accent); }
+  main { padding: 48px 0 20px; }
+  section { margin-bottom: 56px; }
+  h2 {
+    font-size: 1.3rem; margin: 0 0 6px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 8px; }
+  p { color: var(--text); }
+  .dim { color: var(--text-dim); }
+  figure { margin: 20px 0; text-align: center; }
+  figure img { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+  figcaption { color: var(--text-dim); font-size: 0.85rem; margin-top: 10px; }
+  .two-col {
+    display: grid; grid-template-columns: 1fr; gap: 24px; align-items: center;
+  }
+  @media (min-width: 640px) { .two-col { grid-template-columns: 1fr 1fr; } }
+  .card {
+    background: var(--bg-alt); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 1rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 18px 0; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-dim); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.02em; }
+  td.num { font-variant-numeric: tabular-nums; }
+  .up { color: var(--good); font-weight: 600; }
+  .down { color: var(--bad); font-weight: 600; }
+  code, pre {
+    background: var(--code-bg); border-radius: 6px; font-size: 0.85em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  code { padding: 1px 6px; }
+  pre { padding: 14px 16px; overflow-x: auto; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  footer {
+    border-top: 1px solid var(--border); padding: 28px 0 48px;
+    color: var(--text-dim); font-size: 0.85rem; text-align: center;
+  }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="badge">Unofficial reproduction · edge deployment</div>
+    <h1>Edge-PointDiT</h1>
+    <p class="subtitle">Regression-distilled PointDiT for real-time transparent-object<br>depth on a Rockchip RK3588 NPU</p>
+    <div class="links">
+      <a href="https://github.com/ohora23/edge-pointdit-regression-distillation">Code</a>
+      <a href="https://haofeixu.github.io/pointdit/">Original PointDiT project page</a>
+      <a href="https://arxiv.org/abs/2607.02515">Original paper (arXiv)</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section>
+    <h2><span class="num">01</span>Problem</h2>
+    <p>Transparent and specular objects break classical depth sensing outright — stereo,
+    ToF, and structured light all need a consistent surface return, and glass or clear
+    plastic doesn't give them one. <a href="https://haofeixu.github.io/pointdit/">PointDiT</a>
+    proposes solving this with a diffusion ViT that denoises <strong>raw XYZ point maps</strong>
+    directly, skipping the usual depth-map + lossy-VAE detour other generative approaches take.</p>
+    <p>This project reproduces that idea from the public project page (no official code
+    or weights exist) and adds a second, harder constraint on top: <strong>it has to run
+    in real time on a 2-TOPS edge NPU</strong>, not a GPU. That constraint forced a real
+    architectural fork away from the paper, described below.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">02</span>Method</h2>
+    <div class="two-col">
+      <div>
+        <p>The architecture keeps PointDiT's core idea: patchify the point map with XYZ
+        as channels (exactly like RGB), concatenate with tokens from a <strong>frozen
+        image encoder</strong> (DINOv2/DINOv3), and denoise with a plain ViT using
+        joint self-attention and AdaLN-Zero timestep conditioning.</p>
+        <p>On real training data, however, 1-step diffusion sampling plateaued around
+        object-correlation 0.55 with visibly noisy output — going from pure noise to a
+        clean point map in one step is intrinsically hard, and TransCG's ground truth is
+        a single deterministic depth capture, not a distribution to sample from.</p>
+      </div>
+      <figure>
+        <img src="assets/problem_diffusion_noise.png" alt="1-step diffusion prediction collapsing to noise">
+        <figcaption>1-step diffusion on real data (left→right: RGB input, prediction, ground truth) — the sampling step collapses to noise.</figcaption>
+      </figure>
+    </div>
+    <div class="card">
+      <h3>The fork: deterministic regression, not diffusion</h3>
+      <p class="dim">Swapping the 1-step sampler for a deterministic head — zero input,
+      <code>t=0</code>, a single forward pass, no sampling loop — took object correlation
+      from <strong>0.55 → 0.92</strong> outright on the same data and architecture. It's
+      also strictly better for the NPU: one forward pass instead of a diffusion loop.</p>
+    </div>
+    <p style="margin-top:20px">The rest of the network was redesigned around what RKNN
+    can actually place on the NPU: BatchNorm instead of LayerNorm (folds into the
+    preceding conv), ReLU instead of GELU, and — after an A/B that genuinely surprised
+    us — <strong>softmax attention</strong> instead of a cheaper linear-attention variant,
+    because the linear variant NaN's under fp16 on real data while softmax converts to
+    RKNN with only one remaining CPU op and is more accurate besides.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">03</span>Results</h2>
+    <p class="dim">Object-component correlation on TransCG after plane-detrending the
+    ground truth (removes the flat table plane, which otherwise dominates and hides real
+    progress on the objects themselves).</p>
+    <table>
+      <thead><tr><th>Stage</th><th>Object corr.</th><th>Transparent-only</th></tr></thead>
+      <tbody>
+        <tr><td>10 scenes, diffusion</td><td class="num">0.38</td><td class="num">0.04</td></tr>
+        <tr><td>20 scenes</td><td class="num">0.53</td><td class="num">0.16</td></tr>
+        <tr><td>130 scenes, diffusion → <strong>regression</strong></td><td class="num">0.73</td><td class="num">0.20</td></tr>
+        <tr><td>130 scenes + longer training</td><td class="num">0.842</td><td class="num">0.448</td></tr>
+        <tr><td>+ high-resolution token grid</td><td class="num">0.895</td><td class="num">0.730</td></tr>
+        <tr><td><strong>Held-out generalization</strong> (52 unseen scenes)</td><td class="num up">0.884</td><td class="num up">0.876</td></tr>
+      </tbody>
+    </table>
+    <figure>
+      <img src="assets/result_regression.png" alt="Final regression model prediction vs ground truth">
+      <figcaption>Best checkpoint (left→right: RGB input, prediction, ground truth) — transparent bottles and glassware recovered on an unseen scene.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2><span class="num">04</span>RK3588 deployment</h2>
+    <p>The 320×240 regression model converts through ONNX → RKNN with exact
+    onnxruntime parity. Simulated (x86) accuracy of the converted graph:</p>
+    <table>
+      <thead><tr><th>Precision</th><th>Object corr.</th><th>Transparent</th><th>Size</th></tr></thead>
+      <tbody>
+        <tr><td>PyTorch fp32 (reference)</td><td class="num">0.848</td><td class="num">0.817</td><td class="num">—</td></tr>
+        <tr><td>RKNN fp16</td><td class="num up">0.848</td><td class="num up">0.817</td><td class="num">80.4 MB</td></tr>
+        <tr><td>RKNN INT8</td><td class="num down">0.750</td><td class="num down">0.706</td><td class="num">43.5 MB</td></tr>
+      </tbody>
+    </table>
+    <p><strong>fp16 conversion is bit-for-bit equivalent to the PyTorch reference.</strong>
+    INT8 loses ~0.10 correlation; per-layer analysis showed 305/309 layers individually
+    quantize cleanly (cos ≥ 0.99) — the loss is small error accumulating across network
+    depth, not a few bad layers, so hybrid fp16/int8 quantization didn't recover it.
+    Deployment defaults to fp16 when accuracy matters and INT8 when size/speed matter.</p>
+    <p class="dim">On-device FPS on real RK3588 hardware is not yet measured — this
+    project has GPU-only compute and no physical board; the numbers above are from
+    RKNN's x86 simulator.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">05</span>Takeaways</h2>
+    <ul>
+      <li><strong>Match the sampler to the data.</strong> 1-step diffusion is the right
+      formulation when ground truth is genuinely multi-modal; TransCG's deterministic
+      captures made regression both simpler and dramatically more accurate.</li>
+      <li><strong>Standard metrics can lie about progress.</strong> Raw correlation
+      looked saturated at several points in this project; plane-detrending the ground
+      truth revealed the object signal was still climbing underneath.</li>
+      <li><strong>NPU-friendly doesn't mean "cheapest op."</strong> The linear-attention
+      variant looked better on paper for a 2-TOPS NPU, but softmax attention won an A/B
+      on both stability and accuracy — worth measuring, not assuming.</li>
+    </ul>
+  </section>
+
+</main>
+
+<footer>
+  Reproduces the method described in <a href="https://haofeixu.github.io/pointdit/">PointDiT</a>
+  (arXiv:2607.02515). Independent, unofficial implementation for edge-NPU deployment
+  research — not affiliated with the original authors.
+  &middot; <a href="https://github.com/ohora23/edge-pointdit-regression-distillation">Source on GitHub</a>
+</footer>
+
+</body>
+</html>
