@@ -1,0 +1,20 @@
+# envs
+.venv/
+.venv-rknn/
+
+# large/generated data & outputs
+data/
+artifacts/
+*.onnx
+*.rknn
+*.pt
+*.pth
+
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+
+# scratch logs
+.omc/logs/
+.omc/state/

@@ -1,0 +1,14 @@
+{
+  "mission": "pointdit-rk3588",
+  "command": "python3 .omc/research/pointdit-rk3588/evaluate.py",
+  "artifact": ".omc/research/pointdit-rk3588/REPORT.md",
+  "output_schema": {
+    "coverage": "number",
+    "threshold": "number",
+    "critical_missing": "string[]",
+    "passed": "boolean",
+    "sections": "object"
+  },
+  "pass_condition": "coverage >= 0.85 AND critical_missing == []",
+  "exit_codes": { "0": "pass", "1": "fail", "2": "report_missing" }
+}

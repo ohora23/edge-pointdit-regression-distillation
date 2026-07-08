@@ -1,0 +1,25 @@
+[project]
+name = "pointdit"
+version = "0.1.0"
+description = "Point-map diffusion transformer for transparent-object monocular geometry, RK3588-portable"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy<2.3",
+    "pillow",
+    "opencv-python",
+    "einops",
+    "safetensors",
+]
+
+[project.optional-dependencies]
+# torch/torchvision are installed separately from the cu128/cu130 index (Blackwell).
+encoders = ["timm", "transformers", "huggingface_hub"]
+export = ["onnx", "onnxruntime"]
+data = ["OpenEXR", "imageio"]   # DREDS/STD depth is EXR (pip opencv usually lacks EXR)
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["pointdit*"]
