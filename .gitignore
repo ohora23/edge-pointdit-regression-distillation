@@ -15,6 +15,6 @@ __pycache__/
 *.pyc
 *.egg-info/
 
-# scratch logs
-.omc/logs/
-.omc/state/
+# agent tooling state (not project content)
+.omc/
+.gstack/

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PointDiT — live webcam depth</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; color: #eee;
+               font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif; }
+  header { padding: 10px 16px; font-size: 14px; color: #aaa; border-bottom: 1px solid #333;
+            display: flex; justify-content: space-between; align-items: center; }
+  #grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; padding: 6px;
+          height: calc(100% - 42px); box-sizing: border-box; }
+  .panel { position: relative; background: #000; border-radius: 6px; overflow: hidden; }
+  .panel span.label { position: absolute; top: 6px; left: 8px; font-size: 12px; color: #9cf;
+                       background: rgba(0,0,0,.5); padding: 2px 6px; border-radius: 4px; z-index: 2; }
+  video, img, canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+  #status { font-variant-numeric: tabular-nums; }
+  button { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 6px 14px;
+           cursor: pointer; font-size: 13px; }
+  button:disabled { background: #444; cursor: default; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>PointDiT — live webcam depth <span style="color:#666">(drag the 3D panel to orbit)</span></div>
+  <div>
+    <span id="status">idle</span>
+    <button id="prevSample">◀ prev sample</button>
+    <select id="sampleSelect"></select>
+    <button id="nextSample">next sample ▶</button>
+    <button id="start">start camera</button>
+  </div>
+</header>
+
+<div id="grid">
+  <div class="panel">
+    <span class="label">input (no webcam? browsing test-set samples)</span>
+    <video id="video" autoplay playsinline muted></video>
+    <img id="sampleView" style="display:none">
+  </div>
+  <div class="panel"><span class="label">predicted depth</span><img id="depth"></div>
+  <div class="panel"><span class="label">point map (drag to orbit)</span><canvas id="cloud"></canvas></div>
+</div>
+
+<canvas id="capture" style="display:none"></canvas>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const video = document.getElementById("video");
+const sampleView = document.getElementById("sampleView");
+const depthImg = document.getElementById("depth");
+const captureCanvas = document.getElementById("capture");
+const ctx = captureCanvas.getContext("2d", { willReadFrequently: true });
+const statusEl = document.getElementById("status");
+const startBtn = document.getElementById("start");
+const sampleSelect = document.getElementById("sampleSelect");
+const prevBtn = document.getElementById("prevSample");
+const nextBtn = document.getElementById("nextSample");
+
+// server's model resolution (must match --resolution passed to server.py)
+const MODEL_W = 512, MODEL_H = 384;
+captureCanvas.width = MODEL_W;
+captureCanvas.height = MODEL_H;
+
+// --- three.js point cloud viewer ---
+const cloudCanvas = document.getElementById("cloud");
+const renderer = new THREE.WebGLRenderer({ canvas: cloudCanvas, antialias: true });
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
+camera.position.set(0, 0, 2.2);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+const MAX_POINTS = 30000;
+const geometry = new THREE.BufferGeometry();
+const posAttr = new THREE.BufferAttribute(new Float32Array(MAX_POINTS * 3), 3);
+const colAttr = new THREE.BufferAttribute(new Float32Array(MAX_POINTS * 3), 3);
+geometry.setAttribute("position", posAttr);
+geometry.setAttribute("color", colAttr);
+geometry.setDrawRange(0, 0);
+const material = new THREE.PointsMaterial({ size: 0.012, vertexColors: true });
+scene.add(new THREE.Points(geometry, material));
+
+function resizeRenderer() {
+  const w = cloudCanvas.clientWidth, h = cloudCanvas.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resizeRenderer).observe(cloudCanvas);
+resizeRenderer();
+
+function updateCloud(positions, colors) {
+  const n = Math.min(positions.length, MAX_POINTS);
+  for (let i = 0; i < n; i++) {
+    posAttr.array[i * 3 + 0] = positions[i][0];
+    posAttr.array[i * 3 + 1] = -positions[i][1];   // flip Y: image-space down -> up
+    posAttr.array[i * 3 + 2] = -positions[i][2];   // flip Z: face the camera
+    colAttr.array[i * 3 + 0] = colors[i][0];
+    colAttr.array[i * 3 + 1] = colors[i][1];
+    colAttr.array[i * 3 + 2] = colors[i][2];
+  }
+  geometry.setDrawRange(0, n);
+  posAttr.needsUpdate = true;
+  colAttr.needsUpdate = true;
+}
+
+(function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+
+// --- shared inference call: POST a data URL, update depth + point cloud panels ---
+async function runInference(dataUrl) {
+  const t0 = performance.now();
+  try {
+    const res = await fetch("/infer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: dataUrl }),
+    });
+    const data = await res.json();
+    depthImg.src = data.depth_jpg;
+    updateCloud(data.positions, data.colors);
+    const ms = (performance.now() - t0).toFixed(0);
+    statusEl.textContent = `${ms} ms/frame (${(1000 / ms).toFixed(1)} FPS)`;
+  } catch (e) {
+    statusEl.textContent = "error: " + e.message;
+  }
+}
+
+// --- webcam capture + continuous inference loop ---
+let running = false;
+
+startBtn.onclick = async () => {
+  startBtn.disabled = true;
+  statusEl.textContent = "requesting camera...";
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+    video.srcObject = stream;
+    await video.play();
+    video.style.display = "block";
+    sampleView.style.display = "none";
+    running = true;
+    loop();
+  } catch (e) {
+    statusEl.textContent = "no camera (" + e.message + ") — browse samples instead";
+    startBtn.disabled = false;
+  }
+};
+
+async function loop() {
+  if (!running) return;
+  ctx.drawImage(video, 0, 0, MODEL_W, MODEL_H);
+  await runInference(captureCanvas.toDataURL("image/jpeg", 0.8));
+  requestAnimationFrame(loop);
+}
+
+// --- no-camera fallback: cycle through one held-out test-set image per TransCG archive ---
+let sampleNames = [];
+let sampleIdx = 0;
+
+async function showSample(idx) {
+  running = false;
+  video.style.display = "none";
+  sampleView.style.display = "block";
+  sampleIdx = (idx + sampleNames.length) % sampleNames.length;
+  sampleSelect.value = sampleNames[sampleIdx];
+  const url = "samples/" + sampleNames[sampleIdx];
+  sampleView.src = url;
+  await new Promise((resolve) => { sampleView.onload = resolve; });
+  ctx.drawImage(sampleView, 0, 0, MODEL_W, MODEL_H);
+  await runInference(captureCanvas.toDataURL("image/jpeg", 0.9));
+}
+
+prevBtn.onclick = () => showSample(sampleIdx - 1);
+nextBtn.onclick = () => showSample(sampleIdx + 1);
+sampleSelect.onchange = () => showSample(sampleNames.indexOf(sampleSelect.value));
+
+(async function initSamples() {
+  const res = await fetch("/samples");
+  sampleNames = await res.json();
+  sampleSelect.innerHTML = sampleNames.map((n) => `<option value="${n}">${n}</option>`).join("");
+  if (sampleNames.length) showSample(0);
+})();
+</script>
+</body>
+</html>
