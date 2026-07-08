@@ -161,8 +161,7 @@ docs/           # project page (GitHub Pages, served from /docs)
   fallback op (`DepthToSpace`).
 - Single-step regression export wrapper — no diffusion loop in the exported graph.
 
-See `pointdit/export/rknn_notes.md` for the full conversion checklist and
-`.omc/research/pointdit-rk3588/RKNN_REHEARSAL.md` for the debugging log.
+See `pointdit/export/rknn_notes.md` for the full conversion checklist.
 
 > Encoder note: the runnable default is a conv tokenizer (needs no download). DINOv2 is
 > the verified real-data encoder (`--encoder dinov2`); the paper's DINOv3 is available
