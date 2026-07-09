@@ -1,4 +1,4 @@
-# Edge-PointDiT — regression-distilled PointDiT for real-time transparent-object depth on RK3588
+# Edge-PointDiT — regression-distilled PointDiT for real-time transparent-object depth on RK3588(OnGoing)
 
 **[Project page](https://ohora23.github.io/edge-pointdit-regression-distillation/)** ·
 Unofficial reproduction & edge-deployment adaptation of
