@@ -21,6 +21,27 @@ official code or weights were released) and asks a different question on top of 
 drove almost every design decision here, including one that diverges from the paper —
 see [Method](#method--implementation).
 
+## Final results: two model variants
+
+The project ships two checkpoints for two different jobs — a high-resolution quality
+ceiling (GPU-only) and an economical variant actually meant for the RK3588. Both are
+plane-detrended object-component correlation on the official 52-scene held-out TransCG
+split (see [Method](#method--implementation) for what that means).
+
+| | High-resolution (quality ceiling) | Economical (RK3588 deploy) |
+|---|---|---|
+| Resolution / tokens | 384×512, 768 tokens (`xhigh` profile) | 320×240, 300 tokens |
+| Checkpoint | `artifacts/reg_xhigh130_more/pointdit.pt` | `artifacts/reg_130_long/pointdit.pt` → ONNX → RKNN |
+| Target | GPU only — quality ceiling, not real-time-deployable (attention cost ≈6.5× the deploy profile) | RK3588 NPU, 1 core ~2 TOPS, ≥10 FPS target |
+| Held-out object corr. | **0.884** | 0.848 (PyTorch fp32 = RKNN fp16, bit-exact) |
+| Held-out transparent corr. | **0.876** | 0.817 (PyTorch fp32 = RKNN fp16, bit-exact) |
+| Size / precision | fp32, GPU-only | **fp16 80.4 MB** (lossless) · **INT8 43.5 MB** (0.750 / 0.706, ~0.10 corr. loss) |
+| Speed measured so far | **11 ms/frame (~90 FPS)** on an RTX 5080 (single `model.predict()` forward) | Not yet measured on-device — needs a physical RK3588 board; numbers above are from RKNN's x86 simulator |
+
+Both checkpoints share the same denoiser (frozen DINOv2 encoder + ~45M total params) —
+only the token grid changes, so parameter count is identical and only compute cost
+differs between the two.
+
 ## Method / implementation
 
 **Architecture** (`pointdit/`):
