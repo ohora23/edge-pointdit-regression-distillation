@@ -42,12 +42,15 @@ Both checkpoints share the same denoiser (frozen DINOv2 encoder + ~45M total par
 only the token grid changes, so parameter count is identical and only compute cost
 differs between the two.
 
-**High-resolution (xhigh, quality ceiling)** — RGB input · predicted point map · GT:
+**High-resolution (xhigh, quality ceiling)** — RGB input · predicted point map · GT
+(the predicted-depth panel has a light bilateral smoothing applied for display only —
+it's a visualization filter, not a change to the model or its raw output):
 
 ![High-resolution result](docs/assets/result_regression.png)
 
-**Economical (320×240, RK3588 deploy resolution)** — same three-panel layout, visibly
-blockier (300 vs. 768 tokens) but still resolves individual transparent/reflective objects:
+**Economical (320×240, RK3588 deploy resolution)** — same three-panel layout and same
+display-only smoothing; visibly coarser (300 vs. 768 tokens) but still resolves
+individual transparent/reflective objects:
 
 ![Economical deploy-resolution result](docs/assets/result_deploy_320x240.png)
 
