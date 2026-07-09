@@ -42,15 +42,18 @@ Both checkpoints share the same denoiser (frozen DINOv2 encoder + ~45M total par
 only the token grid changes, so parameter count is identical and only compute cost
 differs between the two.
 
-**High-resolution (xhigh, quality ceiling)** — RGB input · predicted point map · GT
-(the predicted-depth panel has a light bilateral smoothing applied for display only —
-it's a visualization filter, not a change to the model or its raw output):
+**Final best model: xhigh (trained on all 130 scenes, regression + gradient loss)** —
+generalization on 4 scenes never seen during training. Input | predicted depth | GT:
 
-![High-resolution result](docs/assets/result_regression.png)
+![Final best model, held-out scenes](docs/assets/milestone_results.png)
 
-**Economical (320×240, RK3588 deploy resolution)** — same three-panel layout and same
-display-only smoothing; visibly coarser (300 vs. 768 tokens) but still resolves
-individual transparent/reflective objects:
+It reproduces structure down to glass bottles and transparent containers against
+cluttered, unfamiliar backgrounds — well past the flat-plane illusion and into real
+object and transparent-object geometry.
+
+**Economical (320×240, RK3588 deploy resolution)** — same input/predicted/GT layout,
+raw model output; visibly coarser (300 vs. 768 tokens) but still resolves individual
+transparent/reflective objects:
 
 ![Economical deploy-resolution result](docs/assets/result_deploy_320x240.png)
 
@@ -113,6 +116,31 @@ object-component correlation after plane-detrend:
 
 **On-device RK3588 FPS is not yet measured** — this project has GPU-only compute and no
 physical RK3588 board; everything below is x86 simulation of the converted graph.
+
+### Upsample (refine) head experiment — marginal effect (honest version)
+
+To push detail further past the xhigh token-grid ceiling, we attached an RGB-guided
+conv refinement head (`concat(coarse depth, input RGB) → 3 conv layers → residual`,
+zero-init identity start — `RefineHead` in `model.py`, `--refine`) on top of xhigh
+(`artifacts/reg_xhigh_refine/`):
+
+| Measurement | xhigh | xhigh + refine | Change |
+|---|---|---|---|
+| Object-component correlation | 0.896 | 0.904 | +0.008 (marginal) |
+| Transparent-object correlation | 0.750 | 0.751 | ~0 |
+
+![Refine head comparison](docs/assets/refine_comparison.png)
+*Input · xhigh · xhigh+refine · GT. The refine head mildly smooths block artifacts, but
+adds almost no new detail or sharper edges.*
+
+**Honest conclusion: the refine head is not a detail lever.** Correlation is
+effectively unchanged; the only visible effect is a marginal deblocking/smoothing.
+Likely causes: the head is shallow (receptive field ≈9px, limited reconstruction
+capacity) and the xhigh 24×32 grid is already fine enough that there's little left for
+a residual to add. Getting past this bottleneck would need a DPT-style multi-scale
+decoder (untried, uncertain payoff, large effort) — not something this project has
+pursued. The best model remains plain xhigh (object 0.90 / transparent 0.75 on the
+first diagnostic split; 0.884 / 0.876 on the full 52-scene held-out set above).
 
 ## Deployment (RK3588 export pipeline)
 
