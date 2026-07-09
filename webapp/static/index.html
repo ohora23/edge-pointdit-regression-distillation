@@ -31,6 +31,7 @@
     <button id="nextSample">next sample ▶</button>
     <select id="cameraSelect" style="display:none"></select>
     <button id="start">start camera</button>
+    <label style="font-size:13px"><input type="checkbox" id="wbToggle"> auto white balance</label>
   </div>
 </header>
 
@@ -134,13 +135,15 @@ function updateCloud(positions, colors) {
 })();
 
 // --- shared inference call: POST a data URL, update depth + point cloud panels ---
+const wbToggle = document.getElementById("wbToggle");
+
 async function runInference(dataUrl) {
   const t0 = performance.now();
   try {
     const res = await fetch("/infer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: dataUrl }),
+      body: JSON.stringify({ image: dataUrl, correct: wbToggle.checked }),
     });
     const data = await res.json();
     depthImg.src = data.depth_jpg;
@@ -216,6 +219,7 @@ async function showSample(idx) {
 prevBtn.onclick = () => showSample(sampleIdx - 1);
 nextBtn.onclick = () => showSample(sampleIdx + 1);
 sampleSelect.onchange = () => showSample(sampleNames.indexOf(sampleSelect.value));
+wbToggle.onchange = () => { if (!running && sampleNames.length) showSample(sampleIdx); };
 
 (async function initSamples() {
   const res = await fetch("/samples");

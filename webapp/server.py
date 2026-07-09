@@ -22,6 +22,19 @@ SAMPLES_DIR = os.path.join(os.path.dirname(__file__), "static", "samples")
 from pointdit.config import ModelConfig, RESOLUTIONS
 from pointdit.model import PointDiT
 
+
+def auto_correct(rgb):
+    """Gray-world white balance + CLAHE contrast — for raw-UVC camera feeds (e.g. a
+    RealSense color stream grabbed without the vendor SDK's AE/AWB) that come in
+    dim/color-cast relative to the properly ISP-processed images the model trained on."""
+    mean = rgb.reshape(-1, 3).mean(axis=0)
+    gray = mean.mean()
+    gains = np.clip(gray / np.clip(mean, 1, None), 0.5, 2.5)
+    balanced = np.clip(rgb.astype(np.float32) * gains, 0, 255).astype(np.uint8)
+    lab = cv2.cvtColor(balanced, cv2.COLOR_RGB2LAB)
+    lab[:, :, 0] = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(lab[:, :, 0])
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+
 MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
 STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
@@ -47,6 +60,8 @@ def infer():
     raw = base64.b64decode(data_url.split(",", 1)[1])
     img = Image.open(io.BytesIO(raw)).convert("RGB").resize((W, H))
     rgb = np.array(img)  # H,W,3 uint8 — reused as point-cloud vertex colors
+    if request.json.get("correct"):
+        rgb = auto_correct(rgb)
 
     t = torch.from_numpy(rgb).float().permute(2, 0, 1).unsqueeze(0) / 255.0
     t = ((t - MEAN) / STD).to(device)
