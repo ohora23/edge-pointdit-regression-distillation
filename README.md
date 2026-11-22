@@ -240,3 +240,13 @@ See `pointdit/export/rknn_notes.md` for the full conversion checklist.
 Reproduces the method described in [PointDiT](https://haofeixu.github.io/pointdit/)
 (arXiv:2607.02515). This is an independent, unofficial implementation for edge-NPU
 deployment research — not affiliated with the original authors.
+
+## License
+
+The code in this repository is released under the [Apache License 2.0](LICENSE).
+
+The sample and result images in `webapp/static/samples/` and `docs/assets/` contain RGB and depth
+data from the [TransCG](https://github.com/Galaxies99/TransCG) dataset, which is licensed under
+[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). Those images, and any model
+weights trained on TransCG, follow that license (non-commercial, share-alike, attribution to the
+TransCG authors), not Apache 2.0. No model weights are included in this repository.
